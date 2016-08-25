@@ -16,11 +16,12 @@ namespace roundhouse.consoles
         public int CommandTimeoutAdmin { get; set; }
         public string SqlFilesDirectory { get; set; }
         public string RepositoryPath { get; set; }
+        public string Version { get; set; }
         public string VersionFile { get; set; }
         public string VersionXPath { get; set; }
         public string AlterDatabaseFolderName { get; set; }
         public string RunAfterCreateDatabaseFolderName { get; set; }
-		public string RunBeforeUpFolderName { get; set; }
+        public string RunBeforeUpFolderName { get; set; }
         public string UpFolderName { get; set; }
         public string DownFolderName { get; set; }
         public string RunFirstAfterUpFolderName { get; set; }
@@ -30,6 +31,8 @@ namespace roundhouse.consoles
         public string IndexesFolderName { get; set; }
         public string RunAfterOtherAnyTimeScriptsFolderName { get; set; }
         public string PermissionsFolderName { get; set; }
+        public string BeforeMigrationFolderName { get; set; }
+        public string AfterMigrationFolderName { get; set; }
         public string SchemaName { get; set; }
         public string VersionTableName { get; set; }
         public string ScriptsRunTableName { get; set; }
@@ -42,6 +45,7 @@ namespace roundhouse.consoles
         public string CreateDatabaseCustomScript { get; set; }
         public string OutputPath { get; set; }
         public bool WarnOnOneTimeScriptChanges { get; set; }
+        public bool WarnAndIgnoreOnOneTimeScriptChanges { get; set; }
         public bool Silent { get; set; }
         public string DatabaseType { get; set; }
         public bool Drop { get; set; }
@@ -57,5 +61,6 @@ namespace roundhouse.consoles
         public bool DisableTokenReplacement { get; set; }
         public bool SearchAllSubdirectoriesInsteadOfTraverse { get; set; }
         public bool DisableOutput { get; set; }
+        public bool Initialize { get; set; }
     }
 }

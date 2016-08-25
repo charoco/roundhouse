@@ -22,8 +22,11 @@ namespace roundhouse.migrators
         private readonly string custom_restore_options;
         private readonly string output_path;
         private readonly bool error_on_one_time_script_changes;
+        private readonly bool ignore_one_time_script_changes;
         private bool running_in_a_transaction;
         private readonly bool is_running_all_any_time_scripts;
+        private readonly bool is_baseline;
+        private readonly bool is_dryrun;
 
         public DefaultDatabaseMigrator(Database database, CryptographicService crypto_provider, ConfigurationPropertyHolder configuration)
         {
@@ -34,8 +37,11 @@ namespace roundhouse.migrators
             restore_path = configuration.RestoreFromPath;
             custom_restore_options = configuration.RestoreCustomOptions;
             output_path = configuration.OutputPath;
-            error_on_one_time_script_changes = !configuration.WarnOnOneTimeScriptChanges;
+            error_on_one_time_script_changes = !configuration.WarnOnOneTimeScriptChanges && !configuration.WarnAndIgnoreOnOneTimeScriptChanges;
+            ignore_one_time_script_changes = configuration.WarnAndIgnoreOnOneTimeScriptChanges;
             is_running_all_any_time_scripts = configuration.RunAllAnyTimeScripts;
+            is_baseline = configuration.Baseline;
+            is_dryrun = configuration.DryRun;
         }
 
         public void initialize_connections()
@@ -107,7 +113,7 @@ namespace roundhouse.migrators
         public void set_recovery_mode(bool simple)
         {
             //database.open_connection(false);
-            Log.bound_to(this).log_an_info_event_containing("Setting recovery mode to '{0}' for database {1}.", simple ? "Simple":"Full", database.database_name );
+            Log.bound_to(this).log_an_info_event_containing("Setting recovery mode to '{0}' for database {1}.", simple ? "Simple" : "Full", database.database_name);
             database.set_recovery_mode(simple);
             //database.close_connection();
         }
@@ -162,6 +168,7 @@ namespace roundhouse.migrators
         public bool run_sql(string sql_to_run, string script_name, bool run_this_script_once, bool run_this_script_every_time, long version_id, Environment environment, string repository_version, string repository_path, ConnectionType connection_type)
         {
             bool this_sql_ran = false;
+            bool skip_run = is_baseline;
 
             if (this_is_a_one_time_script_that_has_changes_but_has_already_been_run(script_name, sql_to_run, run_this_script_once))
             {
@@ -173,32 +180,51 @@ namespace roundhouse.migrators
                     database.close_connection();
                     throw new Exception(error_message);
                 }
+                if (ignore_one_time_script_changes)
+                {
+                    skip_run = true;
+                }
                 Log.bound_to(this).log_a_warning_event_containing("{0} is a one time script that has changed since it was run.", script_name);
             }
 
             if (this_is_an_environment_file_and_its_in_the_right_environment(script_name, environment)
                 && this_script_should_run(script_name, sql_to_run, run_this_script_once, run_this_script_every_time))
             {
-                Log.bound_to(this).log_an_info_event_containing(" Running {0} on {1} - {2}.", script_name, database.server_name, database.database_name);
-
-                foreach (var sql_statement in get_statements_to_run(sql_to_run))
+                if (!is_dryrun)
                 {
-                    try
+                    Log.bound_to(this).log_an_info_event_containing(" {3} {0} on {1} - {2}.", script_name, database.server_name, database.database_name,
+                                            skip_run ? "BASELINING: Recording" : "Running");
+                }
+                if (!skip_run)
+                {
+                    if (!is_dryrun)
                     {
-                        database.run_sql(sql_statement, connection_type);
+                        foreach (var sql_statement in get_statements_to_run(sql_to_run))
+                        {
+                            try
+                            {
+                                database.run_sql(sql_statement, connection_type);
+                            }
+                            catch (Exception ex)
+                            {
+                                database.rollback();
+
+                                record_script_in_scripts_run_errors_table(script_name, sql_to_run, sql_statement, ex.Message, repository_version, repository_path);
+                                database.close_connection();
+                                throw;
+                            }
+                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Log.bound_to(this).log_an_error_event_containing("Error executing file '{0}': statement running was '{1}'", script_name, sql_statement);
-                        database.rollback();
-                        
-                        record_script_in_scripts_run_errors_table(script_name, sql_to_run, sql_statement, ex.Message, repository_version, repository_path);
-                        database.close_connection();
-                        throw;
+                        Log.bound_to(this).log_a_warning_event_containing(" DryRun: {0} on {1} - {2}.", script_name, database.server_name, database.database_name);
                     }
                 }
-                record_script_in_scripts_run_table(script_name, sql_to_run, run_this_script_once, version_id);
-                this_sql_ran = true;
+                if (!is_dryrun)
+                {
+                    record_script_in_scripts_run_table(script_name, sql_to_run, run_this_script_once, version_id);
+                    this_sql_ran = true;
+                }
             }
             else
             {
@@ -283,9 +309,9 @@ namespace roundhouse.migrators
             {
                 old_text_hash = database.get_current_script_hash(script_name);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                Log.bound_to(this).log_a_warning_event_containing("{0} - I didn't find this script executed before.", script_name);
+                Log.bound_to(this).log_a_warning_event_containing("{0} - I didn't find this script executed before.{1}{2}", script_name, System.Environment.NewLine, ex.to_string());
             }
 
             if (string.IsNullOrEmpty(old_text_hash)) return true;
@@ -347,7 +373,7 @@ namespace roundhouse.migrators
             {
                 return false;
             }
-            
+
             return true;
         }
 

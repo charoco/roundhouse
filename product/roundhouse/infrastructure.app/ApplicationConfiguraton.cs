@@ -21,6 +21,7 @@ namespace roundhouse.infrastructure.app
     using folders;
     using infrastructure.logging;
     using infrastructure.logging.custom;
+    using init;
     using logging;
     using migrators;
     using resolvers;
@@ -174,7 +175,7 @@ namespace roundhouse.infrastructure.app
             ObjectFactory.Configure(cfg =>
                                         {
                                             cfg.For<ConfigurationPropertyHolder>().Singleton().Use(configuration_property_holder);
-                                            cfg.For<FileSystemAccess>().Singleton().Use<WindowsFileSystemAccess>();
+                                            cfg.For<FileSystemAccess>().Singleton().Use<DotNetFileSystemAccess>();
                                             cfg.For<Database>().Singleton().Use(context => DatabaseBuilder.build(context.GetInstance<FileSystemAccess>(), configuration_property_holder));
                                             cfg.For<KnownFolders>().Singleton().Use(context => KnownFoldersBuilder.build(context.GetInstance<FileSystemAccess>(), configuration_property_holder));
                                             cfg.For<LogFactory>().Singleton().Use<MultipleLoggerLogFactory>();
@@ -185,6 +186,7 @@ namespace roundhouse.infrastructure.app
                                             cfg.For<VersionResolver>().Singleton().Use(
                                                 context => VersionResolverBuilder.build(context.GetInstance<FileSystemAccess>(), configuration_property_holder));
                                             cfg.For<Environment>().Singleton().Use(new DefaultEnvironment(configuration_property_holder));
+                                            cfg.For<Initializer>().Singleton().Use<FileSystemInitializer>();
                                         });
 
             // forcing a build of database to initialize connections so we can be sure server/database have values
